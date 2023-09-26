@@ -17,32 +17,32 @@ spec:
         {{- toYaml . | nindent 8 }}
       {{- end }}
       containers:
-      - env:
-        - name: NO_PROXY
-          value: {{ .Values.noProxy }}
-        {{- if .Values.proxy }}
-        - name: HTTP_PROXY
-          value: {{ .Values.proxy }}
-        - name: HTTPS_PROXY
-          value: {{ .Values.proxy }}
-        {{- end }}
-        name: {{ .Release.Name }}
-        imagePullPolicy: "{{ .Values.image.imagePullPolicy }}"
-        image: {{ template "registry_url" . }}{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}
-        args:
-        - operator
-        {{- if .Values.debug }}
-        - --v=5
-        - --debug
-        {{- end }}
-        - --namespace
-        - {{ .Release.Namespace }}
-        - --operator-image
-        - {{ template "registry_url" . }}{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}
-        - --seedimage-image
-        - {{ template "registry_url" . }}{{ .Values.seedImage.repository }}:{{ .Values.seedImage.tag | default .Chart.AppVersion }}
-        - --seedimage-image-pullpolicy
-        - {{ .Values.seedImage.imagePullPolicy}}
+        - env:
+          - name: NO_PROXY
+            value: {{ .Values.noProxy }}
+          {{- if .Values.proxy }}
+          - name: HTTP_PROXY
+            value: {{ .Values.proxy }}
+          - name: HTTPS_PROXY
+            value: {{ .Values.proxy }}
+          {{- end }}
+          name: {{ .Release.Name }}
+          imagePullPolicy: "{{ .Values.image.imagePullPolicy }}"
+          image: {{ template "registry_url" . }}{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}
+          args:
+            - operator
+            {{- if .Values.debug }}
+            - --v=5
+            - --debug
+            {{- end }}
+            - --namespace
+            - {{ .Release.Namespace }}
+            - --operator-image
+            - {{ template "registry_url" . }}{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}
+            - --seedimage-image
+            - {{ template "registry_url" . }}{{ .Values.seedImage.repository }}:{{ .Values.seedImage.tag | default .Chart.AppVersion }}
+            - --seedimage-image-pullpolicy
+            - {{ .Values.seedImage.imagePullPolicy}}
       serviceAccountName: {{ .Release.Name }}
       {{- with .Values.tolerations }}
       tolerations:
