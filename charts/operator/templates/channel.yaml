@@ -5,6 +5,10 @@ metadata:
   name: elemental-teal-channel
   namespace: fleet-default
 spec:
+  {{- with .Values.imagePullSecrets }}
+  imagePullSecrets:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
   options:
     image: {{ template "registry_url" . }}{{ .Values.channel.repository }}:{{ .Values.channel.tag }}
   type: custom

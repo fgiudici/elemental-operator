@@ -29,6 +29,11 @@ global:
 # used only if systemDefaultRegistry is empty
 registryUrl: ""
 
+# Optional array of imagePullSecrets containing private registry credentials
+# Ref: https://kubernetes.io/docs/tasks/configure-pod-container/pull-image-private-registry/
+imagePullSecrets: []
+# -name: secretName
+
 # enable debug output for operator
 debug: false
 
