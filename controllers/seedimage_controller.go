@@ -571,6 +571,11 @@ func fillBuildImagePod(seedImg *elementalv1.SeedImage, buildImg string, pullPoli
 		initContainers = userDefinedInitContainers(seedImg)
 	}
 
+	var runAsUser int64 = 1000
+	var runAsGroup int64 = 1000
+	var fsGroup int64 = 2000
+	allowPrivEscalation := false
+
 	pod := &corev1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      name,
@@ -581,6 +586,11 @@ func fillBuildImagePod(seedImg *elementalv1.SeedImage, buildImg string, pullPoli
 			},
 		},
 		Spec: corev1.PodSpec{
+			SecurityContext: &corev1.PodSecurityContext{
+				RunAsUser:  &runAsUser,
+				RunAsGroup: &runAsGroup,
+				FSGroup:    &fsGroup,
+			},
 			InitContainers: initContainers,
 			Containers: []corev1.Container{
 				{
@@ -613,6 +623,13 @@ func fillBuildImagePod(seedImg *elementalv1.SeedImage, buildImg string, pullPoli
 								},
 							},
 						},
+					},
+					SecurityContext: &corev1.SecurityContext{
+						Capabilities: &corev1.Capabilities{
+							Add:  []corev1.Capability{"NET_BIND_SERVICE"},
+							Drop: []corev1.Capability{"ALL"},
+						},
+						AllowPrivilegeEscalation: &allowPrivEscalation,
 					},
 				},
 			},
@@ -674,6 +691,7 @@ func defaultRawInitContainers(seedImg *elementalv1.SeedImage, buildImg string, p
 		"mv /iso/elemental.raw /iso/$(ELEMENTAL_OUTPUT_NAME)",
 	}
 
+	allowPrivEscalation := false
 	return []corev1.Container{
 		{
 			Name:            "build",
@@ -691,6 +709,13 @@ func defaultRawInitContainers(seedImg *elementalv1.SeedImage, buildImg string, p
 				},
 			},
 			Env: defaultEnvVars(seedImg.Name),
+			SecurityContext: &corev1.SecurityContext{
+				Capabilities: &corev1.Capabilities{
+					Add:  []corev1.Capability{"NET_BIND_SERVICE"},
+					Drop: []corev1.Capability{"ALL"},
+				},
+				AllowPrivilegeEscalation: &allowPrivEscalation,
+			},
 		},
 	}
 }
@@ -725,6 +750,7 @@ func defaultIsoInitContainers(seedImg *elementalv1.SeedImage, buildImg string, p
 		)
 	}
 
+	allowPrivEscalation := false
 	containers = append(
 		containers, corev1.Container{
 			Name:            "build",
@@ -742,6 +768,13 @@ func defaultIsoInitContainers(seedImg *elementalv1.SeedImage, buildImg string, p
 				},
 			},
 			Env: defaultEnvVars(seedImg.Name),
+			SecurityContext: &corev1.SecurityContext{
+				Capabilities: &corev1.Capabilities{
+					Add:  []corev1.Capability{"NET_BIND_SERVICE"},
+					Drop: []corev1.Capability{"ALL"},
+				},
+				AllowPrivilegeEscalation: &allowPrivEscalation,
+			},
 		},
 	)
 
