@@ -110,7 +110,7 @@ func (r *client) Register(reg elementalv1.Registration, caCert []byte, state *St
 
 		if protoVersion >= MsgSystemData {
 			log.Infof("Send system data")
-			if err := sendSystemData(conn); err != nil {
+			if err := sendSystemData(conn, protoVersion); err != nil {
 				return nil, fmt.Errorf("failed to send system data: %w", err)
 			}
 		}
@@ -262,10 +262,13 @@ func sendSMBIOSData(conn *websocket.Conn) error {
 	return nil
 }
 
-func sendSystemData(conn *websocket.Conn) error {
+func sendSystemData(conn *websocket.Conn, protoVersion MessageType) error {
 	data, err := hostinfo.Host()
 	if err != nil {
 		return fmt.Errorf("reading system data: %w", err)
+	}
+	if protoVersion < MsgExtendedSystemData {
+		hostinfo.Prune(data)
 	}
 	err = SendJSONData(conn, MsgSystemData, data)
 	if err != nil {
