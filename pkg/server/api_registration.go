@@ -17,6 +17,7 @@ limitations under the License.
 package server
 
 import (
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -24,8 +25,10 @@ import (
 	"net/http"
 	"path"
 	"regexp"
+	"strconv"
 	"strings"
 
+	"github.com/google/uuid"
 	"github.com/gorilla/websocket"
 	values "github.com/rancher/wrangler/v2/pkg/data"
 	"gopkg.in/yaml.v3"
@@ -217,6 +220,65 @@ func (i *InventoryServer) getRancherCACert() string {
 	return cacert
 }
 
+const (
+	tmplRandomKey = "Random"
+	tmplUUIDKey   = "UUID"
+)
+
+func isRandomTemplate(tmplVal []string) bool {
+	if len(tmplVal) != 2 {
+		return false
+	}
+	if tmplVal[0] != tmplRandomKey {
+		return false
+	}
+	if tmplVal[1] != tmplUUIDKey {
+		rndLen, err := strconv.Atoi(tmplVal[2])
+		if err != nil {
+			return false
+		}
+		if rndLen > 32 {
+			return false
+		}
+	}
+	return true
+}
+
+func randomTemplateToString(tmplVal []string) (string, error) {
+	if !isRandomTemplate(tmplVal) {
+		return "", errValueNotFound
+	}
+
+	// sample formats:
+	//	[Random][UUID]	--> e512d5ca-a765-42f2-82b7-264f37ffb329
+	//  [Random][4]			--> e512
+	//  [Random][12]		--> e512d5caa765
+	if tmplVal[1] == tmplUUIDKey {
+		return uuid.NewString(), nil
+	}
+	uuid := uuid.New()
+	rndHex := make([]byte, 32)
+	hex.Encode(rndHex, uuid[:])
+
+	rndLen, _ := strconv.Atoi(tmplVal[2])
+	return string(rndHex[:rndLen]), nil
+}
+
+func templateToString(data map[string]interface{}, tmplVal []string) (string, error) {
+	var str string
+	var ok bool
+
+	if isRandomTemplate(tmplVal) {
+		return randomTemplateToString(tmplVal)
+	}
+
+	obj := values.GetValueN(data, tmplVal...)
+	if str, ok = obj.(string); !ok {
+		return "", errValueNotFound
+	}
+	return str, nil
+}
+
 func replaceStringData(data map[string]interface{}, name string) (string, error) {
 	str := name
 	result := &strings.Builder{}
@@ -233,12 +295,15 @@ func replaceStringData(data map[string]interface{}, name string) (string, error)
 		}
 
 		result.WriteString(str[:i])
-		obj := values.GetValueN(data, strings.Split(str[i+2:j+i], "/")...)
-		if str, ok := obj.(string); ok {
-			result.WriteString(str)
-		} else {
-			return "", errValueNotFound
+		tmplVal := strings.Split(str[i+2:j+i], "/")
+
+		strVal, err := templateToString(data, tmplVal)
+		fmt.Printf("TMPL CONVERSION: %q --> %q\n", tmplVal, strVal)
+		if err != nil {
+			return "", err
 		}
+
+		result.WriteString(strVal)
 		str = str[j+i+1:]
 	}
 
