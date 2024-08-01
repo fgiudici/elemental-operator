@@ -28,6 +28,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/google/uuid"
 	"github.com/gorilla/websocket"
 	"github.com/jaypipes/ghw/pkg/block"
 	"github.com/jaypipes/ghw/pkg/cpu"
@@ -394,6 +395,7 @@ func TestUpdateInventoryFromSystemDataSanitized(t *testing.T) {
 				"elemental.cattle.io/BlockDevice1-Size":      "${System Data/Block Devices/testdisk2/Size}",
 				"elemental.cattle.io/BlockDevice0-Removable": "${System Data/Block Devices/testdisk1/Removable}",
 				"elemental.cattle.io/BlockDevice1-Removable": "${System Data/Block Devices/testdisk2/Removable}",
+				"elemental.cattle.io/Random-UUID":            "${Random/UUID}",
 			},
 		},
 	}
@@ -464,6 +466,9 @@ func TestUpdateInventoryFromSystemDataSanitized(t *testing.T) {
 	// Check values were sanitized
 	assert.Equal(t, len(validation.IsValidLabelValue(inventory.Labels["elemental.cattle.io/CpuModel"])), 0)
 	assert.Equal(t, len(validation.IsValidLabelValue(inventory.Labels["elemental.cattle.io/CpuVendor"])), 0)
+	// Verify random values were created
+	_, err = uuid.Parse(inventory.Labels["elemental.cattle.io/Random-UUID"])
+	assert.NilError(t, err, inventory.Labels["elemental.cattle.io/Random-UUID"])
 }
 
 func TestRegistrationMsgGet(t *testing.T) {
