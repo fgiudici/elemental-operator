@@ -17,7 +17,6 @@ limitations under the License.
 package main
 
 import (
-	"encoding/json"
 	"fmt"
 	"os"
 	"path"
@@ -166,7 +165,7 @@ var _ = Describe("elemental-register", Label("registration", "cli"), func() {
 			cmd.SetArgs([]string{})
 			client.EXPECT().
 				Register(baseConfigFixture.Elemental.Registration, []byte(baseConfigFixture.Elemental.Registration.CACert), &stateFixture).
-				Return(marshalToBytes(baseConfigFixture), nil)
+				Return(marshalToBytes(baseConfigFixture), marshalToBytes(networkConfigFixture), nil)
 			Expect(cmd.Execute()).ToNot(HaveOccurred())
 		})
 		It("should overwrite the config values with passed arguments", func() {
@@ -182,7 +181,7 @@ var _ = Describe("elemental-register", Label("registration", "cli"), func() {
 			wantConfig.Elemental.Registration.NoSMBIOS = false
 			client.EXPECT().
 				Register(wantConfig.Elemental.Registration, []byte(wantConfig.Elemental.Registration.CACert), &stateFixture).
-				Return(marshalToBytes(wantConfig), nil)
+				Return(marshalToBytes(wantConfig), marshalToBytes(networkConfigFixture), nil)
 			Expect(cmd.Execute()).ToNot(HaveOccurred())
 		})
 		It("should use config path argument", func() {
@@ -191,7 +190,7 @@ var _ = Describe("elemental-register", Label("registration", "cli"), func() {
 			marshalIntoFile(fs, alternateConfigFixture, newPath)
 			client.EXPECT().
 				Register(alternateConfigFixture.Elemental.Registration, []byte(alternateConfigFixture.Elemental.Registration.CACert), &stateFixture).
-				Return(marshalToBytes(alternateConfigFixture), nil)
+				Return(marshalToBytes(alternateConfigFixture), marshalToBytes(networkConfigFixture), nil)
 			Expect(cmd.Execute()).ToNot(HaveOccurred())
 		})
 	})
@@ -243,7 +242,7 @@ var _ = Describe("elemental-register state", Label("registration", "cli", "state
 			stateHandler.EXPECT().Save(registrationState).Return(nil)
 			client.EXPECT().
 				Register(baseConfigFixture.Elemental.Registration, []byte(baseConfigFixture.Elemental.Registration.CACert), &registrationState).
-				Return(marshalToBytes(baseConfigFixture), nil)
+				Return(marshalToBytes(baseConfigFixture), marshalToBytes(networkConfigFixture), nil)
 			Expect(cmd.Execute()).ToNot(HaveOccurred())
 		})
 	})
@@ -276,15 +275,13 @@ var _ = Describe("elemental-register --install", Label("registration", "cli", "i
 			stateHandler.EXPECT().Save(stateFixture).Return(nil)
 		})
 		It("should trigger install when --install argument", func() {
-			wantConfigJson, err := json.Marshal(networkConfigFixture)
 			Expect(err).ShouldNot(HaveOccurred())
 
 			cmd.SetArgs([]string{"--install"})
-			client.EXPECT().GetNetworkConfig(alternateConfigFixture.Elemental.Registration, []byte(alternateConfigFixture.Elemental.Registration.CACert), gomock.Any()).Return(wantConfigJson, nil)
 			installer.EXPECT().InstallElemental(alternateConfigFixture, stateFixture, networkConfigFixture).Return(nil)
 			client.EXPECT().
 				Register(baseConfigFixture.Elemental.Registration, []byte(baseConfigFixture.Elemental.Registration.CACert), &stateFixture).
-				Return(marshalToBytes(alternateConfigFixture), nil)
+				Return(marshalToBytes(alternateConfigFixture), marshalToBytes(networkConfigFixture), nil)
 			Expect(cmd.Execute()).ToNot(HaveOccurred())
 		})
 	})
@@ -321,7 +318,7 @@ var _ = Describe("elemental-register --install --no-toolkit", Label("registratio
 			installer.EXPECT().WriteLocalSystemAgentConfig(notoolkitConfigFixture.Elemental).Return(nil)
 			client.EXPECT().
 				Register(notoolkitConfigFixture.Elemental.Registration, []byte(notoolkitConfigFixture.Elemental.Registration.CACert), &stateFixture).
-				Return(marshalToBytes(notoolkitConfigFixture), nil)
+				Return(marshalToBytes(notoolkitConfigFixture), marshalToBytes(networkConfigFixture), nil)
 			Expect(cmd.Execute()).ToNot(HaveOccurred())
 		})
 	})
@@ -354,15 +351,13 @@ var _ = Describe("elemental-register --reset", Label("registration", "cli", "res
 			stateHandler.EXPECT().Save(register.State{}).Return(nil)
 		})
 		It("should trigger reset when --reset argument", func() {
-			wantConfigJson, err := json.Marshal(networkConfigFixture)
 			Expect(err).ShouldNot(HaveOccurred())
 
 			cmd.SetArgs([]string{"--reset"})
-			client.EXPECT().GetNetworkConfig(alternateConfigFixture.Elemental.Registration, []byte(alternateConfigFixture.Elemental.Registration.CACert), gomock.Any()).Return(wantConfigJson, nil)
 			installer.EXPECT().ResetElemental(alternateConfigFixture, register.State{}, networkConfigFixture).Return(nil)
 			client.EXPECT().
 				Register(baseConfigFixture.Elemental.Registration, []byte(baseConfigFixture.Elemental.Registration.CACert), &register.State{}).
-				Return(marshalToBytes(alternateConfigFixture), nil)
+				Return(marshalToBytes(alternateConfigFixture), marshalToBytes(networkConfigFixture), nil)
 			Expect(cmd.Execute()).ToNot(HaveOccurred())
 		})
 	})
