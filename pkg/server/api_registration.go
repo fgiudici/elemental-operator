@@ -275,7 +275,9 @@ func (i *InventoryServer) serveLoop(conn *websocket.Conn, inventory *elementalv1
 			}
 			tmpl.Fill(systemData)
 		case register.MsgNetworkConfig:
-			return i.handleGetNetworkConfig(conn, inventory)
+			if err := i.handleGetNetworkConfig(conn, inventory); err != nil {
+				return fmt.Errorf("failed sending network data: %w", err)
+			}
 		default:
 			return fmt.Errorf("got unexpected message: %s", msgType)
 		}

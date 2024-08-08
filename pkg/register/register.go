@@ -42,8 +42,7 @@ import (
 )
 
 type Client interface {
-	Register(reg elementalv1.Registration, caCert []byte, state *State) ([]byte, error)
-	GetNetworkConfig(reg elementalv1.Registration, caCert []byte, state *State) ([]byte, error)
+	Register(reg elementalv1.Registration, caCert []byte, state *State) ([]byte, []byte, error)
 }
 
 type authClient interface {
@@ -62,79 +61,41 @@ func NewClient() Client {
 	return &client{}
 }
 
-func (r *client) GetNetworkConfig(reg elementalv1.Registration, caCert []byte, state *State) ([]byte, error) {
-	auth, err := getAuthenticator(reg, state)
-	if err != nil {
-		return nil, fmt.Errorf("initializing authenticator: %w", err)
-	}
-
-	log.Infof("Connect to %s", reg.URL)
-
-	conn, err := initWebsocketConn(reg.URL, caCert, auth)
-	if err != nil {
-		return nil, err
-	}
-	defer conn.Close()
-
-	if err := authenticate(conn, auth); err != nil {
-		return nil, fmt.Errorf("%s authentication failed: %w", auth.GetName(), err)
-	}
-	log.Infof("%s authentication completed", auth.GetName())
-
-	log.Debugf("elemental-register protocol version: %d", MsgLast)
-	protoVersion, err := negotiateProtoVersion(conn)
-	if err != nil {
-		return nil, fmt.Errorf("failed to negotiate protocol version: %w", err)
-	}
-	log.Infof("Negotiated protocol version: %d", protoVersion)
-	if protoVersion < MsgNetworkConfig {
-		log.Infof("Elemental Operator does not support Network configuration.")
-		return nil, nil
-	}
-
-	log.Info("Get elemental configuration")
-	if err := WriteMessage(conn, MsgNetworkConfig, []byte{}); err != nil {
-		return nil, fmt.Errorf("request elemental network configuration: %w", err)
-	}
-
-	return getNetworkConfig(conn)
-}
-
 // Register attempts to register the machine with the elemental-operator.
 // Registration updates will fetch and apply new labels, and update Machine annotations such as the IP address.
-func (r *client) Register(reg elementalv1.Registration, caCert []byte, state *State) ([]byte, error) {
+func (r *client) Register(reg elementalv1.Registration, caCert []byte, state *State) ([]byte, []byte, error) {
 	auth, err := getAuthenticator(reg, state)
 	if err != nil {
-		return nil, fmt.Errorf("initializing authenticator: %w", err)
+		return nil, nil, fmt.Errorf("initializing authenticator: %w", err)
 	}
 
 	log.Infof("Connect to %s", reg.URL)
 
 	conn, err := initWebsocketConn(reg.URL, caCert, auth)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	defer conn.Close()
 
 	if err := authenticate(conn, auth); err != nil {
-		return nil, fmt.Errorf("%s authentication failed: %w", auth.GetName(), err)
+		return nil, nil, fmt.Errorf("%s authentication failed: %w", auth.GetName(), err)
 	}
 	log.Infof("%s authentication completed", auth.GetName())
 
 	log.Debugf("elemental-register protocol version: %d", MsgLast)
 	protoVersion, err := negotiateProtoVersion(conn)
 	if err != nil {
-		return nil, fmt.Errorf("failed to negotiate protocol version: %w", err)
+		return nil, nil, fmt.Errorf("failed to negotiate protocol version: %w", err)
 	}
 	log.Infof("Negotiated protocol version: %d", protoVersion)
 
 	if state.IsUpdatable() {
 		if protoVersion < MsgUpdate {
-			return nil, errors.New("elemental-operator protocol version does not support update")
+			return nil, nil, errors.New("elemental-operator protocol version does not support update")
 		}
 		log.Debugln("Initiating registration update")
 		if err := sendUpdateData(conn); err != nil {
-			return nil, fmt.Errorf("failed to send update data: %w", err)
+			return nil, nil, fmt.Errorf("failed to send update data: %w", err)
 		}
 		state.LastUpdate = time.Now()
 	} else {
@@ -144,35 +105,52 @@ func (r *client) Register(reg elementalv1.Registration, caCert []byte, state *St
 	if !reg.NoSMBIOS {
 		log.Infof("Send SMBIOS data")
 		if err := sendSMBIOSData(conn); err != nil {
-			return nil, fmt.Errorf("failed to send SMBIOS data: %w", err)
+			return nil, nil, fmt.Errorf("failed to send SMBIOS data: %w", err)
 		}
 		if err := sendSystemData(conn, protoVersion); err != nil {
-			return nil, fmt.Errorf("failed to send system data: %w", err)
+			return nil, nil, fmt.Errorf("failed to send system data: %w", err)
 		}
 	}
 
 	if protoVersion >= MsgAnnotations {
 		log.Info("Send elemental annotations")
 		if err := sendAnnotations(conn, reg); err != nil {
-			return nil, fmt.Errorf("failend to send dynamic data: %w", err)
+			return nil, nil, fmt.Errorf("failed to send dynamic data: %w", err)
 		}
 	}
 
+	var networkData []byte = nil
+	if protoVersion >= MsgNetworkConfig {
+		log.Info("Get network configuration")
+		if err := WriteMessage(conn, MsgNetworkConfig, []byte{}); err != nil {
+			return nil, nil, fmt.Errorf("request elemental network configuration: %w", err)
+		}
+		networkData, err = getNetworkConfig(conn)
+		if err != nil {
+			return nil, nil, fmt.Errorf("read network configuration: %w", err)
+		}
+	}
 	log.Info("Get elemental configuration")
 	if err := WriteMessage(conn, MsgGet, []byte{}); err != nil {
-		return nil, fmt.Errorf("request elemental configuration: %w", err)
+		return nil, nil, fmt.Errorf("request elemental configuration: %w", err)
 	}
 
 	if protoVersion >= MsgConfig {
-		return getConfig(conn)
+		data, err := getConfig(conn)
+		if err != nil {
+			return nil, nil, fmt.Errorf("read elemental configuration: %w", err)
+		}
+		return data, networkData, nil
 	}
 
 	// Support old Elemental Operator (<= v1.1.0)
 	_, reader, err := conn.NextReader()
 	if err != nil {
-		return nil, fmt.Errorf("read elemental configuration: %w", err)
+		return nil, nil, fmt.Errorf("read elemental configuration: %w", err)
 	}
-	return io.ReadAll(reader)
+
+	data, err := io.ReadAll(reader)
+	return data, networkData, err
 }
 
 func getAuthenticator(reg elementalv1.Registration, state *State) (authClient, error) {
@@ -375,7 +353,7 @@ func getLocalIPAddress(conn *websocket.Conn) (string, error) {
 func getOsReleaseInfo() (map[string]string, error) {
 	data := map[string]string{}
 
-	file, err := os.Open("/etc/os-release")
+	file, err := os.Open("/etc/l, os-release")
 	if err != nil {
 		return data, fmt.Errorf("cannot open /etc/os-release: %w", err)
 	}
