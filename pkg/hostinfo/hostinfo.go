@@ -20,6 +20,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net"
 	"reflect"
 	"strconv"
 	"strings"
@@ -33,7 +34,7 @@ import (
 	"github.com/jaypipes/ghw/pkg/cpu"
 	"github.com/jaypipes/ghw/pkg/gpu"
 	"github.com/jaypipes/ghw/pkg/memory"
-	"github.com/jaypipes/ghw/pkg/net"
+	ghwnet "github.com/jaypipes/ghw/pkg/net"
 	"github.com/jaypipes/ghw/pkg/product"
 	"github.com/jaypipes/ghw/pkg/topology"
 
@@ -54,7 +55,7 @@ type HostInfo struct {
 	Block     *block.Info     `json:"block"`
 	CPU       *cpu.Info       `json:"cpu"`
 	Topology  *topology.Info  `json:"topology"`
-	Network   *net.Info       `json:"network"`
+	Network   *ghwnet.Info    `json:"network"`
 	GPU       *gpu.Info       `json:"gpu"`
 	Chassis   *chassis.Info   `json:"chassis"`
 	BIOS      *bios.Info      `json:"bios"`
@@ -95,7 +96,7 @@ func host(opts ...*ghw.WithOption) (HostInfo, error) {
 		hostInfoCollectionError = true
 	}
 
-	if hostInfo.Network, err = net.New(opts...); err != nil {
+	if hostInfo.Network, err = ghwnet.New(opts...); err != nil {
 		log.Errorf("Could not collect Network data: %s", err.Error())
 		hostInfoCollectionError = true
 	}
@@ -254,6 +255,7 @@ func sanitizeHostInfoVal(data string) string {
 	return data
 }
 
+// ExtractLabelsLegacy provides the old (<= 1.7.0) syntax of Label Templates for backward compatibility
 func ExtractLabelsLegacy(systemData HostInfo) map[string]interface{} {
 	memory := map[string]interface{}{}
 	if systemData.Memory != nil {
@@ -344,6 +346,71 @@ func ExtractLabelsLegacy(systemData HostInfo) map[string]interface{} {
 	return labels
 }
 
+func getIPByIfName(ifName string) string {
+	var (
+		iface   *net.Interface
+		addrs   []net.Addr
+		ip, ip6 net.IP
+		err     error
+	)
+
+	if iface, err = net.InterfaceByName(ifName); err != nil {
+		return ""
+	}
+	if addrs, err = iface.Addrs(); err != nil {
+		return ""
+	}
+	for _, addr := range addrs {
+		var (
+			ipNet *net.IPNet
+			ok    bool
+		)
+
+		if ipNet, ok = addr.(*net.IPNet); !ok {
+			continue
+		}
+
+		if ip = ipNet.IP.To4(); ip != nil {
+			return ip.String()
+		}
+
+		// Let's keep an IPv6 address as fallback if the interface has no IPv4 addresses
+		if ip6 == nil {
+			ip6 = ipNet.IP.To16()
+		}
+	}
+	if ip6 != nil {
+		return ip6.String()
+	}
+	return ""
+}
+
+// GetIPAddresses returns a map containing all the system network interfaces with
+// their IP address (IPv4 if available, IPv6 otherwise)
+func GetIPAddresses() map[string]string {
+	nicAddrs := make(map[string]string)
+	var (
+		ifaces []net.Interface
+		err    error
+	)
+
+	if ifaces, err = net.Interfaces(); err != nil {
+		return nicAddrs
+	}
+
+	for _, iface := range ifaces {
+		if iface.Name == "lo" {
+			continue
+		}
+		ipAddr := getIPByIfName(iface.Name)
+		if ipAddr != "" {
+			nicAddrs[iface.Name] = ipAddr
+		}
+	}
+	return nicAddrs
+}
+
+// ExtractLabels provide the new (>= 1.8.x) syntax of the Label Templates
 func ExtractLabels(systemData HostInfo) map[string]interface{} {
 	labels := map[string]interface{}{}
 
@@ -425,6 +492,7 @@ func ExtractLabels(systemData HostInfo) map[string]interface{} {
 				"AdvertisedLinkModes": strings.Join(iface.AdvertisedLinkModes, ","),
 				"Duplex":              sanitizeHostInfoVal(iface.Duplex),
 				"IsVirtual":           strconv.FormatBool(iface.IsVirtual),
+				"IPAddress":           getIPByIfName(iface.Name),
 				"MacAddress":          iface.MacAddress,
 				"Name":                iface.Name,
 				"PCIAddress":          iface.PCIAddress,
