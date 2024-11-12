@@ -325,6 +325,11 @@ func sendAnnotations(conn *websocket.Conn, reg elementalv1.Registration) error {
 		log.Debugf("sending local IP: %s", data["registration-ip"])
 	}
 
+	netIfaces := hostinfo.GetIPAddresses()
+	for ifName, ipAddr := range netIfaces {
+		data["net."+ifName+".ip"] = ipAddr
+	}
+
 	err := SendJSONData(conn, MsgAnnotations, data)
 	if err != nil {
 		log.Debugf("annotation data:\n%s", litter.Sdump(data))
