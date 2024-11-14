@@ -18,6 +18,7 @@ package register
 
 import (
 	"bufio"
+	"bytes"
 	"crypto/tls"
 	"crypto/x509"
 	"errors"
@@ -25,6 +26,7 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"os/exec"
 	"strings"
 	"time"
 
@@ -295,6 +297,18 @@ func sendSystemData(conn *websocket.Conn, protoVersion MessageType) error {
 	return nil
 }
 
+func nmManagedDevices() (nmDevs []string) {
+	tempBuf := &bytes.Buffer{}
+	cmd := exec.Command("nmcli", "-g", "DEVICE,STATE", "device")
+	cmd.Stdout = tempBuf
+
+	if err := cmd.Run(); err != nil {
+		return
+	}
+	data := tempBuf.String()
+
+}
+
 func sendAnnotations(conn *websocket.Conn, reg elementalv1.Registration) error {
 	data := map[string]string{
 		"reg-version": version.Version,
@@ -326,6 +340,7 @@ func sendAnnotations(conn *websocket.Conn, reg elementalv1.Registration) error {
 	}
 
 	netIfaces := hostinfo.GetIPAddresses()
+	nmManagedDevs := 
 	for ifName, ipAddr := range netIfaces {
 		data["net."+ifName+".ip"] = ipAddr
 	}
